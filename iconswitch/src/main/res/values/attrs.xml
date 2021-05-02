@@ -4,20 +4,25 @@
         <attr name="isw_icon_left" format="reference" />
         <attr name="isw_icon_right" format="reference" />
 
+        <attr name="isw_thumb_padding_horizontal" format="dimension" />
+        <attr name="isw_thumb_padding_vertical" format="dimension" />
+        <attr name="isw_thumb_color" format="color" />
+        <attr name="isw_thumb_color_alternative" format="color" />
+
         <attr name="isw_icon_size" format="dimension" />
+        <attr name="isw_icon_inactive_tint" format="color" />
+        <attr name="isw_icon_active_tint" format="color" />
+        <attr name="isw_icon_padding_vertical" format="dimension" />
+        <attr name="isw_icon_padding_horizontal" format="dimension" />
 
         <attr name="isw_background_color" format="color" />
-        <attr name="isw_thumb_color_left" format="color" />
-        <attr name="isw_thumb_color_right" format="color" />
-        <attr name="isw_inactive_tint_icon_left" format="color" />
-        <attr name="isw_inactive_tint_icon_right" format="color" />
-        <attr name="isw_active_tint_icon_left" format="color" />
-        <attr name="isw_active_tint_icon_right" format="color" />
 
         <attr name="isw_default_selection" format="enum">
             <enum name="left" value="0" />
             <enum name="right" value="1" />
         </attr>
+
+        <attr name="isw_enabled" format="boolean" />
 
     </declare-styleable>
 </resources>

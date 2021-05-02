@@ -6,90 +6,81 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Point;
 import android.graphics.PointF;
+import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Parcelable;
-import android.support.annotation.ColorInt;
-import android.support.annotation.RequiresApi;
-import android.support.v4.content.ContextCompat;
-import android.support.v4.view.ViewCompat;
-import android.support.v7.content.res.AppCompatResources;
+import androidx.annotation.ColorInt;
+import androidx.annotation.NonNull;
+import androidx.annotation.RequiresApi;
+import androidx.annotation.StyleableRes;
+import androidx.appcompat.content.res.AppCompatResources;
+import androidx.core.view.ViewCompat;
 import android.util.AttributeSet;
-import android.util.TypedValue;
+import android.util.Log;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.widget.ImageView;
+import androidx.customview.widget.ViewDragHelper;
 
 /**
  * Created by polyak01 on 31.03.2017.
  * https://github.com/polyak01
  */
 public class IconSwitch extends ViewGroup {
-
     private static final String EXTRA_SUPER = "extra_super";
     private static final String EXTRA_CHECKED = "extra_is_checked";
-
-    private static final int DEFAULT_IMAGE_SIZE_DP = 18;
-    private static final int MIN_ICON_SIZE_DP = 12;
+    private static final int DEF_STYLE_RES = R.style.IconSwitchStyle_Switch;
     private static final int UNITS_VELOCITY = 1000;
-
     private final double TOUCH_SLOP_SQUARE;
     private final int FLING_MIN_VELOCITY;
 
     private ImageView leftIcon;
     private ImageView rightIcon;
     private ThumbView thumb;
-
     private IconSwitchBg background;
 
-    private ViewDragHelper thumbDragHelper;
+    private final ViewDragHelper thumbDragHelper;
     private VelocityTracker velocityTracker;
 
     private float thumbPosition;
-    private int thumbDragDistance;
 
-    private int switchWidth, switchHeight;
-    private int iconOffset, iconSize;
-    private int iconTop, iconBottom;
-    private int thumbStartLeft, thumbEndLeft;
-    private int thumbDiameter;
+    private int inactiveIconTint;
+    private int activeIconTint;
+    private int thumbColor;
+    private int thumbColor2;
+    private int backgroundColor;
 
-    private int inactiveTintIconLeft, activeTintIconLeft;
-    private int inactiveTintIconRight, activeTintIconRight;
-    private int thumbColorLeft, thumbColorRight;
-
-    private PointF downPoint;
+    private final Dimensions dimens;
+    private final PointF downPoint;
     private boolean isClick;
-    private int dragState;
-
     private int translationX, translationY;
 
     private Checked currentChecked;
-
     private CheckedChangeListener listener;
 
     public IconSwitch(Context context) {
         super(context);
-        init(null);
+        init(null, 0, DEF_STYLE_RES);
     }
 
     public IconSwitch(Context context, AttributeSet attrs) {
         super(context, attrs);
-        init(attrs);
+        init(attrs, 0, DEF_STYLE_RES);
     }
 
     public IconSwitch(Context context, AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
-        init(attrs);
+        init(attrs, defStyleAttr, DEF_STYLE_RES);
     }
 
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
     public IconSwitch(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
         super(context, attrs, defStyleAttr, defStyleRes);
-        init(attrs);
+        init(attrs, defStyleAttr, (defStyleRes == 0) ? DEF_STYLE_RES : defStyleRes);
     }
 
     {
@@ -98,118 +89,155 @@ public class IconSwitch extends ViewGroup {
         TOUCH_SLOP_SQUARE = Math.pow(viewConf.getScaledTouchSlop(), 2);
         thumbDragHelper = ViewDragHelper.create(this, new ThumbDragCallback());
         downPoint = new PointF();
+        dimens = new Dimensions(getContext());
     }
 
-    private void init(AttributeSet attr) {
+    @Override
+    protected Parcelable onSaveInstanceState() {
+        Bundle state = new Bundle();
+        state.putParcelable(EXTRA_SUPER, super.onSaveInstanceState());
+        state.putInt(EXTRA_CHECKED, currentChecked.ordinal());
+        return state;
+    }
+
+    @Override
+    protected void onRestoreInstanceState(Parcelable parcel) {
+        Bundle state = (Bundle) parcel;
+        super.onRestoreInstanceState(state.getParcelable(EXTRA_SUPER));
+        currentChecked = Checked.values()[state.getInt(EXTRA_CHECKED, 0)];
+        thumbPosition = currentChecked == Checked.LEFT ? 0f : 1f;
+        ensureCorrectColors();
+    }
+
+    private void init(AttributeSet attr, int defStyleAttr, int defStyleRes) {
         addView(thumb = new ThumbView(getContext()));
         addView(leftIcon = new ImageView(getContext()));
         addView(rightIcon = new ImageView(getContext()));
 
         setBackground(background = new IconSwitchBg());
 
-        iconSize = dpToPx(DEFAULT_IMAGE_SIZE_DP);
-
-        int colorDefInactive = getAccentColor();
-        int colorDefActive = Color.WHITE;
-        int colorDefBackground = ContextCompat.getColor(getContext(), R.color.isw_defaultBg);
-        //noinspection UnnecessaryLocalVariable
-        int colorDefThumb = colorDefInactive;
-
+        loadDefaultAttributes();
         if (attr != null) {
-            TypedArray ta = getContext().obtainStyledAttributes(attr, R.styleable.IconSwitch);
-            iconSize = ta.getDimensionPixelSize(R.styleable.IconSwitch_isw_icon_size, iconSize);
-            inactiveTintIconLeft = ta.getColor(R.styleable.IconSwitch_isw_inactive_tint_icon_left, colorDefInactive);
-
-            activeTintIconLeft = ta.getColor(R.styleable.IconSwitch_isw_active_tint_icon_left, colorDefActive);
-            inactiveTintIconRight = ta.getColor(R.styleable.IconSwitch_isw_inactive_tint_icon_right, colorDefInactive);
-            activeTintIconRight = ta.getColor(R.styleable.IconSwitch_isw_active_tint_icon_right, colorDefActive);
-            background.setColor(ta.getColor(R.styleable.IconSwitch_isw_background_color, colorDefBackground));
-            thumbColorLeft = ta.getColor(R.styleable.IconSwitch_isw_thumb_color_left, colorDefThumb);
-            thumbColorRight = ta.getColor(R.styleable.IconSwitch_isw_thumb_color_right, colorDefThumb);
-            currentChecked = Checked.values()[ta.getInt(R.styleable.IconSwitch_isw_default_selection, 0)];
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                leftIcon.setImageDrawable(ta.getDrawable(R.styleable.IconSwitch_isw_icon_left));
-                rightIcon.setImageDrawable(ta.getDrawable(R.styleable.IconSwitch_isw_icon_right));
-            } else {
-                final int drawableLeftId = ta.getResourceId(R.styleable.IconSwitch_isw_icon_left, -1);
-                final int drawableRightId = ta.getResourceId(R.styleable.IconSwitch_isw_icon_right, -1);
-                leftIcon.setImageDrawable(AppCompatResources.getDrawable(getContext(), drawableLeftId));
-                rightIcon.setImageDrawable(AppCompatResources.getDrawable(getContext(), drawableRightId));
-            }
-
-            ta.recycle();
-        } else {
-            currentChecked = Checked.LEFT;
-            inactiveTintIconLeft = colorDefInactive;
-            activeTintIconLeft = colorDefActive;
-            inactiveTintIconRight = colorDefInactive;
-            activeTintIconRight = colorDefActive;
-            background.setColor(colorDefBackground);
-            thumbColorLeft = colorDefThumb;
-            thumbColorRight = colorDefThumb;
+            loadAttribute(attr, defStyleAttr, defStyleRes);
         }
 
-        thumbPosition = currentChecked == Checked.LEFT ? 0f : 1f;
-
-        calculateSwitchDimensions();
-
+        thumbPosition = (currentChecked == Checked.LEFT) ? 0f : 1f;
         ensureCorrectColors();
     }
 
-    private void calculateSwitchDimensions() {
-        iconSize = Math.max(iconSize, dpToPx(MIN_ICON_SIZE_DP));
+    private void loadDefaultAttributes() {
+        currentChecked = Checked.LEFT;
+        inactiveIconTint = getResources().getColor(R.color.isw_defaultIconActiveTintColour);
+        activeIconTint = getResources().getColor(R.color.isw_defaultIconActiveTintColour);
+        background.setColor(getResources().getColor(R.color.isw_defaultBg));
+        thumbColor = getResources().getColor(R.color.isw_defaultThumbColour);
+        leftIcon.setImageResource(R.drawable.ic_add_photo_alternate_white_24dp);
+        rightIcon.setImageResource(R.drawable.ic_add_photo_alternate_white_24dp);
+    }
 
-        switchWidth = iconSize * 4;
-        switchHeight = Math.round(iconSize * 2f);
+    private void loadAttribute(AttributeSet attr, int defStyleAttr, int defStyleRes) {
+        TypedArray ta = getContext().obtainStyledAttributes(attr, R.styleable.IconSwitch, defStyleAttr, defStyleRes);
+        inactiveIconTint = ta.getColor(R.styleable.IconSwitch_isw_icon_inactive_tint, inactiveIconTint);
+        activeIconTint = ta.getColor(R.styleable.IconSwitch_isw_icon_active_tint, activeIconTint);
+        backgroundColor = ta.getColor(R.styleable.IconSwitch_isw_background_color, backgroundColor);
+        thumbColor = ta.getColor(R.styleable.IconSwitch_isw_thumb_color, thumbColor);
+        thumbColor2 = ta.getColor(R.styleable.IconSwitch_isw_thumb_color_alternative, 0);
+        leftIcon.setImageDrawable(getDrawableFromResource(ta, R.styleable.IconSwitch_isw_icon_left));
+        rightIcon.setImageDrawable(getDrawableFromResource(ta, R.styleable.IconSwitch_isw_icon_right));
+        currentChecked = Checked.values()[ta.getInt(R.styleable.IconSwitch_isw_default_selection, 0)];
+        setEnabled(ta.getBoolean(R.styleable.IconSwitch_isw_enabled, true));
+        dimens.setIconSize(ta.getDimensionPixelSize(R.styleable.IconSwitch_isw_icon_size, dimens.getIconSize()));
+        dimens.setThumbHorizontalPadding(ta.getDimensionPixelSize(R.styleable.IconSwitch_isw_thumb_padding_horizontal, dimens.getThumbHorizontalPadding()));
+        dimens.setThumbVerticalPadding(ta.getDimensionPixelSize(R.styleable.IconSwitch_isw_thumb_padding_vertical, dimens.getThumbVerticalPadding()));
+        dimens.setIconHorizontalPadding(ta.getDimensionPixelSize(R.styleable.IconSwitch_isw_icon_padding_horizontal, dimens.getIconHorizontalPadding()));
+        dimens.setIconVerticalPadding(ta.getDimensionPixelSize(R.styleable.IconSwitch_isw_icon_padding_vertical, dimens.getIconVerticalPadding()));
+        ta.recycle();
+    }
 
-        iconOffset = Math.round(iconSize * 0.6f);
-        iconTop = (switchHeight - iconSize) / 2;
-        iconBottom = iconTop + iconSize;
-        thumbDiameter = switchHeight;
+    private Drawable getDrawableFromResource(TypedArray ta, @StyleableRes int resAttr) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            return ta.getDrawable(resAttr);
+        }
+        return AppCompatResources.getDrawable(getContext(), ta.getResourceId(resAttr, -1));
+    }
 
-        int thumbRadius = thumbDiameter / 2;
-        int iconHalfSize = iconSize / 2;
-        thumbStartLeft = iconOffset + iconHalfSize - thumbRadius;
-        thumbEndLeft = switchWidth - iconOffset - iconHalfSize - thumbRadius;
-        thumbDragDistance = thumbEndLeft - thumbStartLeft;
+    private void ensureCorrectColors() {
+        if (isEnabled()) {
+            leftIcon.setColorFilter(isLeftChecked() ? activeIconTint : inactiveIconTint);
+            rightIcon.setColorFilter(isLeftChecked() ? inactiveIconTint : activeIconTint);
+            thumb.setColor((!isLeftChecked() && thumbColor2 != 0) ? thumbColor2 : thumbColor);
+            background.setColor(backgroundColor);
+        } else {
+            leftIcon.setColorFilter(desaturate(isLeftChecked() ? activeIconTint : inactiveIconTint));
+            rightIcon.setColorFilter(desaturate(isLeftChecked() ? inactiveIconTint : activeIconTint));
+            thumb.setColor(desaturate(thumbColor));
+            background.setColor(desaturate(backgroundColor));
+        }
     }
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        int overshootPadding = Math.round(thumbDiameter * 0.1f);
+        int width = getSize(widthMeasureSpec, dimens.getSwitchWidth());
+        int height = getSize(heightMeasureSpec, dimens.getSwitchHeight());
 
-        int width = getSize(widthMeasureSpec, switchWidth + overshootPadding * 2);
-        int height = getSize(heightMeasureSpec, switchHeight);
+        int thumbWidthSpec = MeasureSpec.makeMeasureSpec(dimens.getThumbWidth(), MeasureSpec.EXACTLY);
+        int thumbHeightSpec = MeasureSpec.makeMeasureSpec(dimens.getThumbHeight(), MeasureSpec.EXACTLY);
+        thumb.measure(thumbWidthSpec, thumbHeightSpec);
 
-        int thumbSpec = MeasureSpec.makeMeasureSpec(switchHeight, MeasureSpec.EXACTLY);
-        thumb.measure(thumbSpec, thumbSpec);
-
-        int iconSpec = MeasureSpec.makeMeasureSpec(iconSize, MeasureSpec.EXACTLY);
+        int iconSpec = MeasureSpec.makeMeasureSpec(dimens.getIconSize(), MeasureSpec.EXACTLY);
         leftIcon.measure(iconSpec, iconSpec);
         rightIcon.measure(iconSpec, iconSpec);
 
-        background.init(iconSize, width, height);
+        background.init(width, height, dimens.getBackgroundWidth(), dimens.getBackgroundHeight());
 
-        translationX = (width / 2) - (switchWidth / 2);
-        translationY = (height / 2) - (switchHeight / 2);
+        translationX = (width / 2) - (dimens.getSwitchWidth() / 2);
+        translationY = (height / 2) - (dimens.getSwitchHeight() / 2);
 
         setMeasuredDimension(width, height);
     }
 
+    private int getSize(int measureSpec, int fallbackSize) {
+        int mode = MeasureSpec.getMode(measureSpec);
+        int size = MeasureSpec.getSize(measureSpec);
+        switch (mode) {
+            case MeasureSpec.AT_MOST:
+                return Math.min(size, fallbackSize);
+            case MeasureSpec.EXACTLY:
+                return size;
+            case MeasureSpec.UNSPECIFIED:
+                return fallbackSize;
+        }
+        return size;
+    }
+
     @Override
     protected void onLayout(boolean changed, int l, int t, int r, int b) {
-        leftIcon.layout(iconOffset, iconTop, iconOffset + iconSize, iconBottom);
+        leftIcon.layout(dimens.getLeftIconLeft(), dimens.getIconTop(), dimens.getLeftIconRight(), dimens.getIconBottom());
+        rightIcon.layout(dimens.getRightIconLeft(), dimens.getIconTop(), dimens.getRightIconRight(), dimens.getIconBottom());
+        thumb.layout(dimens.getThumbLeft(thumbPosition), dimens.getThumbTop(), dimens.getThumbRight(thumbPosition), dimens.getThumbBottom());
+//        background.setBounds(dimens.getBackgroundBounds());
+    }
 
-        int rightIconLeft = switchWidth - iconOffset - iconSize;
-        rightIcon.layout(rightIconLeft, iconTop, rightIconLeft + iconSize, iconBottom);
+    @Override
+    protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
+        canvas.save();
+        canvas.translate(translationX, translationY);
+        boolean result = super.drawChild(canvas, child, drawingTime);
+        canvas.restore();
+        return result;
+    }
 
-        int thumbLeft = (int) (thumbStartLeft + thumbDragDistance * thumbPosition);
-        thumb.layout(thumbLeft, 0, thumbLeft + thumbDiameter, switchHeight);
+    @Override
+    public void computeScroll() {
+        if (thumbDragHelper.continueSettling(true)) {
+            ViewCompat.postInvalidateOnAnimation(this);
+        }
     }
 
     @Override
     public boolean onTouchEvent(MotionEvent e) {
+        if (!isEnabled()) return true;
+
         MotionEvent event = MotionEvent.obtain(e);
         event.setLocation(e.getX() - translationX, e.getY() - translationY);
         switch (event.getAction()) {
@@ -222,6 +250,7 @@ public class IconSwitch extends ViewGroup {
             case MotionEvent.ACTION_UP:
                 onUp(event);
                 clearTouchInfo();
+                performClick();
                 break;
             case MotionEvent.ACTION_CANCEL:
                 clearTouchInfo();
@@ -267,67 +296,155 @@ public class IconSwitch extends ViewGroup {
         }
     }
 
-    private void toggleSwitch() {
-        currentChecked = currentChecked.toggle();
-        int newLeft = currentChecked == Checked.LEFT ? thumbStartLeft : thumbEndLeft;
-        if (thumbDragHelper.smoothSlideViewTo(thumb, newLeft, thumb.getTop())) {
-            ViewCompat.postInvalidateOnAnimation(this);
-        }
-    }
-
     @Override
-    public void computeScroll() {
-        if (thumbDragHelper.continueSettling(true)) {
-            ViewCompat.postInvalidateOnAnimation(this);
-        }
-    }
-
-    @Override
-    protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
-        canvas.save();
-        canvas.translate(translationX, translationY);
-        boolean result = super.drawChild(canvas, child, drawingTime);
-        canvas.restore();
-        return result;
-    }
-
-    private int getSize(int measureSpec, int fallbackSize) {
-        int mode = MeasureSpec.getMode(measureSpec);
-        int size = MeasureSpec.getSize(measureSpec);
-        switch (mode) {
-            case MeasureSpec.AT_MOST:
-                return Math.min(size, fallbackSize);
-            case MeasureSpec.EXACTLY:
-                return size;
-            case MeasureSpec.UNSPECIFIED:
-                return fallbackSize;
-            default:
-                return size;
-        }
-    }
-
-    private int getLeftAfterFling(float direction) {
-        return direction > 0 ? thumbEndLeft : thumbStartLeft;
-    }
-
-    public void setCheckedChangeListener(CheckedChangeListener listener) {
-        this.listener = listener;
-    }
-
-    private void ensureCorrectColors() {
-        leftIcon.setColorFilter(isLeftChecked() ? activeTintIconLeft : inactiveTintIconLeft);
-        rightIcon.setColorFilter(isLeftChecked() ? inactiveTintIconRight : activeTintIconRight);
-        thumb.setColor(isLeftChecked() ? thumbColorLeft : thumbColorRight);
-    }
-
-    private boolean isLeftChecked() {
-        return currentChecked == Checked.LEFT;
+    public boolean performClick() {
+        return super.performClick();
     }
 
     private void notifyCheckedChanged() {
         if (listener != null) {
             listener.onCheckChanged(currentChecked);
         }
+    }
+
+    private void applyPositionalTransform() {
+        float clampedPosition = Math.max(0f, Math.min(thumbPosition, 1f)); //Ignore overshooting
+        int leftColor = Evaluator.ofArgb(clampedPosition, activeIconTint, inactiveIconTint);
+        leftIcon.setColorFilter(leftColor);
+        int rightColor = Evaluator.ofArgb(clampedPosition, inactiveIconTint, activeIconTint);
+        rightIcon.setColorFilter(rightColor);
+        if (thumbColor2 != 0) {
+            int thumbTransitionalColor = Evaluator.ofArgb(clampedPosition, thumbColor, thumbColor2);
+            thumb.setColor(thumbTransitionalColor);
+        }
+        float closenessToCenter = 1f - Math.abs(clampedPosition - 0.5f) / 0.5f;
+        float iconScale = 1f - (closenessToCenter * 0.3f);
+        leftIcon.setScaleX(iconScale);
+        leftIcon.setScaleY(iconScale);
+        rightIcon.setScaleX(iconScale);
+        rightIcon.setScaleY(iconScale);
+    }
+
+    private int getLeftAfterFling(float direction) {
+        return direction > 0 ? dimens.getThumbEndLeft() : dimens.getThumbStartLeft();
+    }
+
+    private class ThumbDragCallback extends ViewDragHelper.Callback {
+        private int dragState;
+
+        @Override
+        public boolean tryCaptureView(@NonNull View child, int pointerId) {
+            if (child != thumb) {
+                thumbDragHelper.captureChildView(thumb, pointerId);
+                return false;
+            }
+            return true;
+        }
+
+        @Override
+        public void onViewReleased(@NonNull View releasedChild, float xvel, float yvel) {
+            if (isClick) {
+                return;
+            }
+            boolean isFling = Math.abs(xvel) >= FLING_MIN_VELOCITY;
+            int newLeft = isFling ? getLeftAfterFling(xvel) : getLeftToSettle();
+            Checked newChecked = (newLeft == dimens.getThumbStartLeft()) ? Checked.LEFT : Checked.RIGHT;
+            if (newChecked != currentChecked) {
+                currentChecked = newChecked;
+                notifyCheckedChanged();
+            }
+            thumbDragHelper.settleCapturedViewAt(newLeft, dimens.getThumbTop());
+            invalidate();
+        }
+
+        private int getLeftToSettle() {
+            return thumbPosition > 0.5f ? dimens.getThumbEndLeft() : dimens.getThumbStartLeft();
+        }
+
+        @Override
+        public void onViewPositionChanged(@NonNull View changedView, int left, int top, int dx, int dy) {
+            thumbPosition = ((float) (left - dimens.getThumbStartLeft())) / dimens.getThumbDragDistance();
+            applyPositionalTransform();
+        }
+
+        @Override
+        public int clampViewPositionHorizontal(@NonNull View child, int left, int dx) {
+            if (dragState == ViewDragHelper.STATE_DRAGGING) {
+                return Math.max(dimens.getThumbStartLeft(), Math.min(left, dimens.getThumbEndLeft()));
+            }
+            return left;
+        }
+
+        @Override
+        public int clampViewPositionVertical(@NonNull View child, int top, int dy) {
+            return dimens.getThumbTop();
+        }
+
+        @Override
+        public void onViewDragStateChanged(int state) {
+            dragState = state;
+        }
+
+        @Override
+        public int getViewHorizontalDragRange(@NonNull View child) {
+            return child == thumb ? dimens.getThumbDragDistance() : 0;
+        }
+    }
+
+    public void getThumbCenter(Point point) {
+        final int thumbLeft = (int) (dimens.getThumbStartLeft() + dimens.getThumbDragDistance() * thumbPosition);
+        final int thumbCenterX = thumbLeft + translationX;
+        final int thumbCenterY = dimens.getThumbHeight() + translationY;
+        point.set(thumbCenterX, thumbCenterY);
+    }
+
+    private int dpToPx(int dp) {
+        return Math.round(getResources().getDisplayMetrics().density * dp);
+    }
+
+    /**
+     * Convert an RGB color to Grayscale.
+     * desaturation formula used from {@link "https://stackoverflow.com/a/596241/2038544"}.
+     * @param rgb the color to be desaturated.
+     * @return the desaturated color.
+     */
+    private @ColorInt int desaturate(@ColorInt int rgb) {
+        //Luma conversion formula Photometric/digital ITU BT.709
+        int v = (int) (0.2126 * Color.green(rgb) + 0.7152 * Color.red(rgb) + 0.0722 * Color.blue(rgb));
+
+        // level brightness and decrease contrast
+        // factor ranges between -1 to 1 depending on v value
+        float factor = (v - 123.0f) / 123.0f;
+        // adjust brightness by reducing value by up to -50/50
+        int a = (int) (v - factor * 50);
+
+        // create new desaturated rgb color (same value r, g, b means grayscale color)
+        int r = Color.rgb(a, a, a);
+        Log.i("MODULE", rgb + ":" + v + ":" + a + ":" + r);
+        return r;
+    }
+
+    private boolean isLeftChecked() {
+        return currentChecked == Checked.LEFT;
+    }
+
+    private void toggleSwitch() {
+        currentChecked = currentChecked.toggle();
+        int newLeft = (currentChecked == Checked.LEFT) ? dimens.getThumbStartLeft() : dimens.getThumbEndLeft();
+        if (thumbDragHelper.smoothSlideViewTo(thumb, newLeft, dimens.getThumbTop())) {
+            ViewCompat.postInvalidateOnAnimation(this);
+        }
+    }
+
+    /**
+     * Enable or disable the switch.
+     * Makes use of the native {@code ViewGroup.setEnabled()} method.
+     * @param enabled should enable value
+     */
+    public void setEnabled(boolean enabled) {
+        super.setEnabled(enabled);
+        ensureCorrectColors();
+        invalidate();
     }
 
     public void setChecked(Checked newChecked) {
@@ -346,33 +463,23 @@ public class IconSwitch extends ViewGroup {
         return currentChecked;
     }
 
-    public void setThumbColorLeft(@ColorInt int thumbColorLeft) {
-        this.thumbColorLeft = thumbColorLeft;
+    public void setThumbColor(@ColorInt int thumbColor) {
+        this.thumbColor = thumbColor;
         ensureCorrectColors();
     }
 
-    public void setThumbColorRight(@ColorInt int thumbColorRight) {
-        this.thumbColorRight = thumbColorRight;
+    public void setThumbAlternativeColor(@ColorInt int thumbColor2) {
+        this.thumbColor2 = thumbColor2;
         ensureCorrectColors();
     }
 
-    public void setInactiveTintIconLeft(@ColorInt int inactiveTintIconLeft) {
-        this.inactiveTintIconLeft = inactiveTintIconLeft;
+    public void setInactiveIconTint(@ColorInt int inactiveIconTint) {
+        this.inactiveIconTint = inactiveIconTint;
         ensureCorrectColors();
     }
 
-    public void setInactiveTintIconRight(@ColorInt int inactiveTintIconRight) {
-        this.inactiveTintIconRight = inactiveTintIconRight;
-        ensureCorrectColors();
-    }
-
-    public void setActiveTintIconLeft(@ColorInt int activeTintIconLeft) {
-        this.activeTintIconLeft = activeTintIconLeft;
-        ensureCorrectColors();
-    }
-
-    public void setActiveTintIconRight(@ColorInt int activeTintIconRight) {
-        this.activeTintIconRight = activeTintIconRight;
+    public void setActiveIconTint(@ColorInt int activeIconTint) {
+        this.activeIconTint = activeIconTint;
         ensureCorrectColors();
     }
 
@@ -389,118 +496,32 @@ public class IconSwitch extends ViewGroup {
     }
 
     public void setIconSize(int dp) {
-        iconSize = dpToPx(dp);
-        calculateSwitchDimensions();
+        dimens.setIconSize(dpToPx(dp));
         requestLayout();
     }
 
-    @Override
-    protected Parcelable onSaveInstanceState() {
-        Bundle state = new Bundle();
-        state.putParcelable(EXTRA_SUPER, super.onSaveInstanceState());
-        state.putInt(EXTRA_CHECKED, currentChecked.ordinal());
-        return state;
+    public void setIconHorizontalPadding(int padding) {
+        dimens.setIconHorizontalPadding(padding);
+        requestLayout();
     }
 
-    @Override
-    protected void onRestoreInstanceState(Parcelable parcel) {
-        Bundle state = (Bundle) parcel;
-        super.onRestoreInstanceState(state.getParcelable(EXTRA_SUPER));
-        currentChecked = Checked.values()[state.getInt(EXTRA_CHECKED, 0)];
-        thumbPosition = currentChecked == Checked.LEFT ? 0f : 1f;
-        ensureCorrectColors();
+    public void setIconVerticalPadding(int padding) {
+        dimens.setIconVerticalPadding(padding);
+        requestLayout();
     }
 
-    private void applyPositionalTransform() {
-        float clampedPosition = Math.max(0f, Math.min(thumbPosition, 1f)); //Ignore overshooting
-        int leftColor = Evaluator.ofArgb(clampedPosition, activeTintIconLeft, inactiveTintIconLeft);
-        leftIcon.setColorFilter(leftColor);
-        int rightColor = Evaluator.ofArgb(clampedPosition, inactiveTintIconRight, activeTintIconRight);
-        rightIcon.setColorFilter(rightColor);
-        int thumbColor = Evaluator.ofArgb(clampedPosition, thumbColorLeft, thumbColorRight);
-        thumb.setColor(thumbColor);
-        float closenessToCenter = 1f - Math.abs(clampedPosition - 0.5f) / 0.5f;
-        float iconScale = 1f - (closenessToCenter * 0.3f);
-        leftIcon.setScaleX(iconScale);
-        leftIcon.setScaleY(iconScale);
-        rightIcon.setScaleX(iconScale);
-        rightIcon.setScaleY(iconScale);
+    public void setThumbHorizontalPadding(int padding) {
+        dimens.setThumbHorizontalPadding(padding);
+        requestLayout();
     }
 
-    private class ThumbDragCallback extends ViewDragHelper.Callback {
-
-        @Override
-        public boolean tryCaptureView(View child, int pointerId) {
-            if (child != thumb) {
-                thumbDragHelper.captureChildView(thumb, pointerId);
-                return false;
-            }
-            return true;
-        }
-
-        @Override
-        public void onViewReleased(View releasedChild, float xvel, float yvel) {
-            if (isClick) {
-                return;
-            }
-            boolean isFling = Math.abs(xvel) >= FLING_MIN_VELOCITY;
-            int newLeft = isFling ? getLeftAfterFling(xvel) : getLeftToSettle();
-            Checked newChecked = newLeft == thumbStartLeft ? Checked.LEFT : Checked.RIGHT;
-            if (newChecked != currentChecked) {
-                currentChecked = newChecked;
-                notifyCheckedChanged();
-            }
-            thumbDragHelper.settleCapturedViewAt(newLeft, thumb.getTop());
-            invalidate();
-        }
-
-        private int getLeftToSettle() {
-            return thumbPosition > 0.5f ? thumbEndLeft : thumbStartLeft;
-        }
-
-        @Override
-        public void onViewPositionChanged(View changedView, int left, int top, int dx, int dy) {
-            thumbPosition = ((float) (left - thumbStartLeft)) / thumbDragDistance;
-            applyPositionalTransform();
-        }
-
-        @Override
-        public int clampViewPositionHorizontal(View child, int left, int dx) {
-            if (dragState == ViewDragHelper.STATE_DRAGGING) {
-                return Math.max(thumbStartLeft, Math.min(left, thumbEndLeft));
-            }
-            return left;
-        }
-
-        @Override
-        public void onViewDragStateChanged(int state) {
-            dragState = state;
-        }
-
-        @Override
-        public int getViewHorizontalDragRange(View child) {
-            return child == thumb ? thumbDragDistance : 0;
-        }
+    public void setThumbVerticalPadding(int padding) {
+        dimens.setThumbVerticalPadding(padding);
+        requestLayout();
     }
 
-    public void getThumbCenter(Point point) {
-        final int thumbRadius = thumbDiameter / 2;
-        final int thumbLeft = (int) (thumbStartLeft + thumbDragDistance * thumbPosition);
-        final int thumbCenterX = thumbLeft + translationX;
-        final int thumbCenterY = thumbRadius + translationY;
-        point.set(thumbCenterX, thumbCenterY);
-    }
-
-    private int dpToPx(int dp) {
-        return Math.round(getResources().getDisplayMetrics().density * dp);
-    }
-
-    private int getAccentColor() {
-        TypedValue typedValue = new TypedValue();
-        TypedArray a = getContext().obtainStyledAttributes(typedValue.data, new int[]{R.attr.colorAccent});
-        int color = a.getColor(0, 0);
-        a.recycle();
-        return color;
+    public void setCheckedChangeListener(CheckedChangeListener listener) {
+        this.listener = listener;
     }
 
     public interface CheckedChangeListener {

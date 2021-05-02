@@ -6,7 +6,6 @@ package com.polyak.iconswitch;
  */
 class Evaluator {
 
-
     public static int ofArgb(float fraction, int startColor, int endColor) {
         int startA = (startColor >> 24) & 0xff;
         int startR = (startColor >> 16) & 0xff;

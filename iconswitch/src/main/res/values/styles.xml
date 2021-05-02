@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="IconSwitchStyle">
+        <item name="isw_icon_left">@drawable/ic_add_photo_alternate_white_24dp</item>
+        <item name="isw_icon_right">@drawable/ic_add_photo_alternate_white_24dp</item>
+        <item name="isw_icon_inactive_tint">@color/isw_defaultThumbColour</item>
+        <item name="isw_icon_active_tint">@color/isw_defaultIconActiveTintColour</item>
+        <item name="isw_thumb_color">@color/isw_defaultThumbColour</item>
+        <item name="isw_background_color">@color/isw_defaultBg</item>
+        <item name="isw_default_selection">left</item>
+        <item name="isw_enabled">true</item>
+        <item name="isw_icon_size">@dimen/isw_default_icon_size</item>
+    </style>
+
+    <style name="IconSwitchStyle.Switch">
+        <item name="isw_thumb_color_alternative">@color/isw_defaultThumbAlternativeColour</item>
+
+        <item name="isw_thumb_padding_vertical">@dimen/isw_default_thumb_vertical_padding_switch</item>
+        <item name="isw_thumb_padding_horizontal">@dimen/isw_default_thumb_horizontal_padding_switch</item>
+        <item name="isw_icon_padding_vertical">@dimen/isw_default_icon_vertical_padding_switch</item>
+        <item name="isw_icon_padding_horizontal">@dimen/isw_default_icon_horizontal_padding_switch</item>
+    </style>
+
+    <style name="IconSwitchStyle.ToggleButton">
+        <item name="isw_thumb_padding_vertical">@dimen/isw_default_thumb_vertical_padding_toggle_button</item>>
+        <item name="isw_thumb_padding_horizontal">@dimen/isw_default_thumb_horizontal_padding_toggle_button</item>>
+        <item name="isw_icon_padding_vertical">@dimen/isw_default_icon_vertical_padding_toggle_button</item>>
+        <item name="isw_icon_padding_horizontal">@dimen/isw_default_icon_horizontal_padding_toggle_button</item>>
+    </style>
+</resources>

@@ -1,16 +1,17 @@
 buildscript {
     repositories {
         jcenter()
+        google()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:2.2.3'
-        classpath 'com.novoda:bintray-release:0.4.0'
+        classpath 'com.android.tools.build:gradle:4.1.3'
     }
 }
 
 allprojects {
     repositories {
         jcenter()
+        google()
     }
 }
 
@@ -23,6 +24,6 @@ ext {
     groupId = 'com.polyak'
     uploadName = 'IconSwitch'
     description = 'Custom switch-like widget.'
-    publishVersion = '1.0.0'
+    publishVersion = '2.0.0'
     licences = ['Apache-2.0']
 }

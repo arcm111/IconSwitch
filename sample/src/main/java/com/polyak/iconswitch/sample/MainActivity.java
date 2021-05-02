@@ -4,13 +4,15 @@ import android.animation.ValueAnimator;
 import android.content.Intent;
 import android.graphics.Point;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
-import android.support.annotation.ColorInt;
-import android.support.annotation.ColorRes;
-import android.support.design.widget.Snackbar;
-import android.support.v4.app.FragmentManager;
-import android.support.v4.content.ContextCompat;
-import android.support.v7.app.AppCompatActivity;
+
+import androidx.annotation.ColorInt;
+import androidx.annotation.ColorRes;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
+import androidx.fragment.app.FragmentManager;
+
 import android.view.View;
 import android.view.ViewAnimationUtils;
 import android.view.Window;
@@ -22,15 +24,16 @@ import android.widget.TextView;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.material.snackbar.Snackbar;
 import com.polyak.iconswitch.IconSwitch;
 import com.polyak.iconswitch.IconSwitch.Checked;
+
 
 public class MainActivity extends AppCompatActivity implements OnMapReadyCallback,
         IconSwitch.CheckedChangeListener, ValueAnimator.AnimatorUpdateListener,
         View.OnClickListener {
 
     private static final int DURATION_COLOR_CHANGE_MS = 400;
-
     private static final Uri URL_GITHUB_POLYAK = Uri.parse("https://github.com/polyak01");
     private static final Uri URL_GITHUB_YAROLEGOVICH = Uri.parse("https://github.com/yarolegovich");
     private static final Uri URL_DRIBBBLE_PROKHODA = Uri.parse("https://dribbble.com/prokhoda");
@@ -59,10 +62,10 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
 
         content = findViewById(R.id.content);
         toolbar = findViewById(R.id.toolbar);
-        TextView title = (TextView) findViewById(R.id.toolbar_title);
+        TextView title = findViewById(R.id.toolbar_title);
         title.setText(R.string.app_name);
 
-        iconSwitch = (IconSwitch) findViewById(R.id.icon_switch);
+        iconSwitch = findViewById(R.id.icon_switch);
         iconSwitch.setCheckedChangeListener(this);
         updateColors(false);
 
@@ -82,7 +85,7 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
     private void updateColors(boolean animated) {
         int colorIndex = iconSwitch.getChecked().ordinal();
         toolbar.setBackgroundColor(toolbarColors[colorIndex]);
-        if (animated) {
+        if (animated && statusBarAnimator != null) {
             switch (iconSwitch.getChecked()) {
                 case LEFT:
                     statusBarAnimator.reverse();
@@ -93,25 +96,31 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
             }
             revealToolbar();
         } else {
-            window.setStatusBarColor(statusBarColors[colorIndex]);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                window.setStatusBarColor(statusBarColors[colorIndex]);
+            }
         }
     }
 
     private void revealToolbar() {
         iconSwitch.getThumbCenter(revealCenter);
         moveFromSwitchToToolbarSpace(revealCenter);
-        ViewAnimationUtils.createCircularReveal(toolbar,
-                revealCenter.x, revealCenter.y,
-                iconSwitch.getHeight(), toolbar.getWidth())
-                .setDuration(DURATION_COLOR_CHANGE_MS)
-                .start();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            ViewAnimationUtils.createCircularReveal(toolbar,
+                    revealCenter.x, revealCenter.y,
+                    iconSwitch.getHeight(), toolbar.getWidth())
+                    .setDuration(DURATION_COLOR_CHANGE_MS)
+                    .start();
+        }
     }
 
     @Override
     public void onAnimationUpdate(ValueAnimator animator) {
         if (animator == statusBarAnimator) {
             int color = (Integer) animator.getAnimatedValue();
-            window.setStatusBarColor(color);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                window.setStatusBarColor(color);
+            }
         }
     }
 
@@ -149,16 +158,13 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
 
     @Override
     public void onClick(View v) {
-        switch (v.getId()) {
-            case R.id.credit_polyak:
-                open(URL_GITHUB_POLYAK);
-                break;
-            case R.id.credit_yarolegovich:
-                open(URL_GITHUB_YAROLEGOVICH);
-                break;
-            case R.id.credit_prokhoda:
-                open(URL_DRIBBBLE_PROKHODA);
-                break;
+        int id = v.getId();
+        if (id == R.id.credit_polyak) {
+            open(URL_GITHUB_POLYAK);
+        } else if (id == R.id.credit_yarolegovich) {
+            open(URL_GITHUB_YAROLEGOVICH);
+        } else if (id == R.id.credit_prokhoda) {
+            open(URL_DRIBBBLE_PROKHODA);
         }
     }
 
@@ -168,10 +174,7 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
         if (intent.resolveActivity(getPackageManager()) != null) {
             startActivity(intent);
         } else {
-            Snackbar.make(content,
-                    R.string.msg_no_browser,
-                    Snackbar.LENGTH_SHORT)
-                    .show();
+            Snackbar.make(content, R.string.msg_no_browser, Snackbar.LENGTH_SHORT).show();
         }
     }
 
@@ -194,9 +197,12 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
     }
 
     private ValueAnimator createArgbAnimator(int leftColor, int rightColor) {
-        ValueAnimator animator = ValueAnimator.ofArgb(leftColor, rightColor);
-        animator.setDuration(DURATION_COLOR_CHANGE_MS);
-        animator.addUpdateListener(this);
+        ValueAnimator animator = null;
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            animator = ValueAnimator.ofArgb(leftColor, rightColor);
+            animator.setDuration(DURATION_COLOR_CHANGE_MS);
+            animator.addUpdateListener(this);
+        }
         return animator;
     }
 

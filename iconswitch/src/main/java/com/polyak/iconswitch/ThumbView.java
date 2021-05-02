@@ -4,9 +4,9 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
-import android.graphics.PointF;
+import android.graphics.RectF;
 import android.os.Build;
-import android.support.annotation.RequiresApi;
+import androidx.annotation.RequiresApi;
 import android.util.AttributeSet;
 import android.view.View;
 
@@ -16,9 +16,8 @@ import android.view.View;
  */
 class ThumbView extends View {
 
-    private PointF center;
-    private float radius;
-    private Paint paint;
+    private final Paint paint;
+    private final RectF bounds;
 
     public ThumbView(Context context) {
         super(context);
@@ -40,19 +39,19 @@ class ThumbView extends View {
     {
         paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         paint.setColor(Color.GRAY);
-        center = new PointF();
+        bounds = new RectF();
     }
 
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
-        center.set(w * 0.5f, h * 0.5f);
-        radius = Math.min(w, h) * 0.5f;
+        bounds.set(0, 0, w, h);
     }
 
     @Override
     protected void onDraw(Canvas canvas) {
-        canvas.drawCircle(center.x, center.y, radius, paint);
+        float radius = Math.min(bounds.height(), bounds.width()) * 0.5f;
+        canvas.drawRoundRect(bounds, radius, radius, paint);
     }
 
     public void setColor(int color) {
